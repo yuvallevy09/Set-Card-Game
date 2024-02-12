@@ -100,7 +100,20 @@ public class Dealer implements Runnable {
      * Check if any cards can be removed from the deck and placed on the table.
      */
     private void placeCardsOnTable() {
-        // TODO implement
+        // TODO implement - yuval 
+        // initialize an iterator
+        while (!deck.isEmpty() & table.countCards() < 12) {
+            int card = deck.remove(0); // check why i cant simply use remove() without any parameters 
+            for (Integer slot : table.cardToSlot) { //  need to check that slot is the actual slot
+                if (table.cardToSlot[slot] == null) {
+                    table.placeCard(card, slot);
+                }
+            }
+             
+            
+            
+        }
+
     }
 
     /**
