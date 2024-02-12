@@ -79,6 +79,7 @@ public class Table {
         return cards;
     }
 
+
     /**
      * Places a card on the table in a grid slot.
      * @param card - the card id to place in the slot.
@@ -94,7 +95,12 @@ public class Table {
         cardToSlot[card] = slot;
         slotToCard[slot] = card;
 
-        // TODO implement
+        // TODO implement - Tomer
+        env.ui.placeCard(card, slot); //Display the card image on the table according to the slot
+        
+        //Check if needs to remove the card from the deck here or its happening in the Dealer's file.
+        //check to see if anything else needs to be added here
+        
     }
 
     /**
@@ -106,7 +112,12 @@ public class Table {
             Thread.sleep(env.config.tableDelayMillis);
         } catch (InterruptedException ignored) {}
 
-        // TODO implement
+        // TODO implement - Tomer
+        int cardToRemove = slotToCard[slot];
+        env.ui.removeCard(slot); //removes the card image from the table
+        slotToCard[slot] = null; //removes the card from the slot
+        cardToSlot[cardToRemove] = null; // removes the slot the card was
+        //Check to see if anything else needs to be added here
     }
 
     /**
@@ -116,6 +127,7 @@ public class Table {
      */
     public void placeToken(int player, int slot) {
         // TODO implement
+        env.ui.placeToken(player, slot); //place the token with the player's name on slot he chose.
     }
 
     /**
@@ -125,7 +137,15 @@ public class Table {
      * @return       - true iff a token was successfully removed.
      */
     public boolean removeToken(int player, int slot) {
-        // TODO implement
+        // TODO implement - Tomer
+        //Create a 2D array - [number of players][12 == number of cards in table]
+        // initialize it to false/-1, and inside the [num of players is the players id]. if the player placed a token on the slot, change it to true
+        //needs to activate the array also in placeToken method above
+        //in this method, check if the slot is true. if so , i can remove if from the table.
+        //otherwise return false, means there is no token of this player in the slot.
+        
+        env.ui.removeToken(player, slot);
+        
         return false;
     }
 }
