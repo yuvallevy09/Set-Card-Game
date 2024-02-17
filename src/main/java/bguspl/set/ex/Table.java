@@ -49,7 +49,7 @@ public class Table {
         {
             for(int j = 0; j < 12; j++)
             {
-                playersTokensLocations[i][j] = -1; //Initialize all cells to -1
+                playersTokensLocations[i][j] = -1; //Initialize all cells to -1, means no token is set on the table yet
             }
         } 
     }
@@ -129,6 +129,7 @@ public class Table {
         env.ui.removeCard(slot); //removes the card image from the table
         slotToCard[slot] = null; //removes the card from the slot
         cardToSlot[cardToRemove] = null; // removes the slot the card was
+        // needs to remove tokens on corresponding card 
         //Check to see if anything else needs to be added here
     }
 

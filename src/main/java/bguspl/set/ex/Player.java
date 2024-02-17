@@ -54,7 +54,7 @@ public class Player implements Runnable {
     private int score;
 
     //added by tomer
-    private ArrayBlockingQueue<Integer> playerActionQueue;
+    private ArrayBlockingQueue<Integer> keysPressed; // check what happens when inserting element beyond capacity
 
     /**
      * The class constructor.
@@ -70,7 +70,7 @@ public class Player implements Runnable {
         this.table = table;
         this.id = id;
         this.human = human;
-        playerActionQueue = new ArrayBlockingQueue<>(3);
+        keysPressed = new ArrayBlockingQueue<>(3);
     }
 
     /**
@@ -123,17 +123,23 @@ public class Player implements Runnable {
     public void keyPressed(int slot) {
         // TODO implement - Tomer
 
-        // if its the 3rd token of this player, Dealer should check whether its a set or not, might belong to Dealer
-        //needs to check whether this player is penalize or freezed at the moment, if so do nothing, else correspond, might belong to Dealer.
+        
+        //needs to check whether this player is penalized or freezed at the moment, if so do nothing, else correspond, might belong to Dealer.
         if(table.playersTokensLocations[id][slot] != -1) // if there is a token's player on this slot
         {
             table.removeToken(id, slot); //removes the token
-            playerActionQueue.remove(slot); // removes the slot from the player's input queue
+            keysPressed.remove(slot); // removes the slot from the player's input queue
         }
-        else if(playerActionQueue.remainingCapacity() >= 3 && table.playersTokensLocations[id][slot] == 1) // the player doesnt have a token on this slot 
+        else if(keysPressed.remainingCapacity() > 0) // the player doesnt have a token on this slot 
         {
             table.placeToken(id, slot); // adds the player's token to the slot on the table
-            enqueue(slot);
+            keysPressed.offer(slot);
+            if(keysPressed.remainingCapacity() == 0) //check if player put all 3 tokens on the table
+            {
+                // notify dealer 
+                // if its the 3rd token of this player, Dealer should check whether its a set or not, might belong to Dealer
+                // needs to wait and notify the Dealer's thread that the player put 3 tokens on the table.
+            } 
         }
     
     }
@@ -147,18 +153,12 @@ public class Player implements Runnable {
     public void point() {
         // TODO implement
         // method is called from the dealer class once the player has completed a set
-        // add one point to the player
-        // needs to clear his input key queue
-        //remove player's tokens from the table
         //dealer is removing the cards from the table
         //freeze the player, probably by the dealer
         score++;
-        while (!isEmpty()) {
-            dequeue(); // clears the player input queue           
-        }
-
+        keysPressed.clear();
+         
         
-
 
         int ignored = table.countCards(); // this part is just for demonstration in the unit tests
         env.ui.setScore(id, ++score);
@@ -169,28 +169,23 @@ public class Player implements Runnable {
      */
     public void penalty() {
         // TODO implement
+        keysPressed.clear();
+        //needs to put the player's thread on hold, put him a sleep perhaps
     }
 
     public int score() {
         return score;
     }
 
-
-// Queue methods-----------------------------------------------------------------------------------------------------
-    public boolean enqueue(Integer slot)
-    {
-        return playerActionQueue.offer(slot); // Adds the action to the queue, returns false if the queue is full
+    public ArrayBlockingQueue<Integer> getKeysPressed() {
+        return keysPressed;
     }
 
-    public Integer dequeue()
+    public int getId()
     {
-        return playerActionQueue.poll(); // Retrieves and removes the head of the queue, returns null if the queue is empty
+        return id;
     }
-    
-    public boolean isEmpty()
-    {
-        return playerActionQueue.isEmpty(); // Returns true if the queue is empty, false otherwise
-    }
+
 }
 
   
