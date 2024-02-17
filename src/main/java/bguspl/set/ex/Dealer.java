@@ -97,6 +97,8 @@ public class Dealer implements Runnable {
      */
     private void removeCardsFromTable() {
         // TODO implement
+        
+
         for (Player player : players) {
             if (player.getKeysPressed().remainingCapacity() == 0) { // if queue is full
                 int[] cards = keysToCards(player.getKeysPressed()); // transfer cards selected by player to array
@@ -147,6 +149,7 @@ public class Dealer implements Runnable {
      */
     private void sleepUntilWokenOrTimeout() {
         // TODO implement
+        // sleep();
     }
 
     /**
@@ -180,5 +183,27 @@ public class Dealer implements Runnable {
      */
     private void announceWinners() {
         // TODO implement
+        int maxScore = Integer.MIN_VALUE;
+        List<Integer> winners = new ArrayList<>();
+    
+        for (Player player : players) {
+            int playerScore = player.score();
+            if (playerScore > maxScore) {
+                // Found a new maximum score, clear the winners list
+                winners.clear();
+                maxScore = playerScore;
+                // Add the current player to the winners list
+                winners.add(player.getId());
+            } else if (playerScore == maxScore) {
+                // Another player has the same score as the current maximum, add them to winners list
+                winners.add(player.getId());
+            }
+        }
+    
+        // Convert the list of winners to an array
+        int[] arrayOfWinners = winners.stream().mapToInt(Integer::intValue).toArray();
+        
+        // Notify the environment of the winners
+        env.ui.announceWinner(arrayOfWinners);
     }
 }
