@@ -1,6 +1,9 @@
 package bguspl.set.ex;
 
 import bguspl.set.Env;
+import java.util.concurrent.ArrayBlockingQueue; // imported by tomer to create a queue for player's actions
+
+import javax.swing.Action;
 
 /**
  * This class manages the players' threads and data
@@ -50,6 +53,9 @@ public class Player implements Runnable {
      */
     private int score;
 
+    //added by tomer
+    private ArrayBlockingQueue<Integer> playerActionQueue;
+
     /**
      * The class constructor.
      *
@@ -64,6 +70,7 @@ public class Player implements Runnable {
         this.table = table;
         this.id = id;
         this.human = human;
+        playerActionQueue = new ArrayBlockingQueue<>(3);
     }
 
     /**
@@ -114,7 +121,21 @@ public class Player implements Runnable {
      * @param slot - the slot corresponding to the key pressed.
      */
     public void keyPressed(int slot) {
-        // TODO implement
+        // TODO implement - Tomer
+
+        // if its the 3rd token of this player, Dealer should check whether its a set or not, might belong to Dealer
+        //needs to check whether this player is penalize or freezed at the moment, if so do nothing, else correspond, might belong to Dealer.
+        if(table.playersTokensLocations[id][slot] != -1) // if there is a token's player on this slot
+        {
+            table.removeToken(id, slot); //removes the token
+            playerActionQueue.remove(slot); // removes the slot from the player's input queue
+        }
+        else if(playerActionQueue.remainingCapacity() >= 3 && table.playersTokensLocations[id][slot] == 1) // the player doesnt have a token on this slot 
+        {
+            table.placeToken(id, slot); // adds the player's token to the slot on the table
+            enqueue(slot);
+        }
+    
     }
 
     /**
@@ -125,6 +146,19 @@ public class Player implements Runnable {
      */
     public void point() {
         // TODO implement
+        // method is called from the dealer class once the player has completed a set
+        // add one point to the player
+        // needs to clear his input key queue
+        //remove player's tokens from the table
+        //dealer is removing the cards from the table
+        //freeze the player, probably by the dealer
+        score++;
+        while (!isEmpty()) {
+            dequeue(); // clears the player input queue           
+        }
+
+        
+
 
         int ignored = table.countCards(); // this part is just for demonstration in the unit tests
         env.ui.setScore(id, ++score);
@@ -140,4 +174,23 @@ public class Player implements Runnable {
     public int score() {
         return score;
     }
+
+
+// Queue methods-----------------------------------------------------------------------------------------------------
+    public boolean enqueue(Integer slot)
+    {
+        return playerActionQueue.offer(slot); // Adds the action to the queue, returns false if the queue is full
+    }
+
+    public Integer dequeue()
+    {
+        return playerActionQueue.poll(); // Retrieves and removes the head of the queue, returns null if the queue is empty
+    }
+    
+    public boolean isEmpty()
+    {
+        return playerActionQueue.isEmpty(); // Returns true if the queue is empty, false otherwise
+    }
 }
+
+  

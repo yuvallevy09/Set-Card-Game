@@ -29,6 +29,8 @@ public class Table {
      */
     protected final Integer[] cardToSlot; // slot per card (if any)
 
+    protected Integer[][] playersTokensLocations; //Added by tomer, Mapping between a player token and it place on the table.
+
     /**
      * Constructor for testing.
      *
@@ -41,6 +43,15 @@ public class Table {
         this.env = env;
         this.slotToCard = slotToCard;
         this.cardToSlot = cardToSlot;
+
+        playersTokensLocations = new Integer[env.config.players][12]; // Creates an 2D array in size of the numbers of players * num of slots on table
+        for(int i = 0; i <= env.config.players; i++)
+        {
+            for(int j = 0; j < 12; j++)
+            {
+                playersTokensLocations[i][j] = -1; //Initialize all cells to -1
+            }
+        } 
     }
 
     /**
@@ -100,6 +111,7 @@ public class Table {
         
         //Check if needs to remove the card from the deck here or its happening in the Dealer's file.
         //check to see if anything else needs to be added here
+        // check to see if before we match the card to slot and opp we need to check if this location is null
         
     }
 
@@ -127,7 +139,11 @@ public class Table {
      */
     public void placeToken(int player, int slot) {
         // TODO implement
-        env.ui.placeToken(player, slot); //place the token with the player's name on slot he chose.
+        if(playersTokensLocations[player][slot] == -1) // if there is no token of this player on this slot
+        {
+            playersTokensLocations[player][slot] = 1; // marks the slot with the player's token
+            env.ui.placeToken(player, slot); //places the token with the player's name on slot he chose
+        } 
     }
 
     /**
@@ -138,14 +154,12 @@ public class Table {
      */
     public boolean removeToken(int player, int slot) {
         // TODO implement - Tomer
-        //Create a 2D array - [number of players][12 == number of cards in table]
-        // initialize it to false/-1, and inside the [num of players is the players id]. if the player placed a token on the slot, change it to true
-        //needs to activate the array also in placeToken method above
-        //in this method, check if the slot is true. if so , i can remove if from the table.
-        //otherwise return false, means there is no token of this player in the slot.
-        
-        env.ui.removeToken(player, slot);
-        
+        if(playersTokensLocations[player][slot] != -1) //if there is a token on this slot
+        {
+            env.ui.removeToken(player, slot);
+            playersTokensLocations[player][slot] = -1; //removes the token from the array
+            return true;
+        }
         return false;
     }
 }
