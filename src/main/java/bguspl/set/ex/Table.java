@@ -109,6 +109,7 @@ public class Table {
         // TODO implement - Tomer
         env.ui.placeCard(card, slot); //Display the card image on the table according to the slot
         
+        
         //Check if needs to remove the card from the deck here or its happening in the Dealer's file.
         //check to see if anything else needs to be added here
         // check to see if before we match the card to slot and opp we need to check if this location is null
@@ -144,6 +145,7 @@ public class Table {
         {
             playersTokensLocations[player][slot] = 1; // marks the slot with the player's token
             env.ui.placeToken(player, slot); //places the token with the player's name on slot he chose
+            
         } 
     }
 
