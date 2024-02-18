@@ -46,6 +46,8 @@ public class Dealer implements Runnable {
     public int[] cardsToCheck = new int[3]; // check if to make private and use set function 
     public int checkPlayer;
 
+  
+
 
     
     public Dealer(Env env, Table table, Player[] players) {
@@ -159,7 +161,14 @@ public class Dealer implements Runnable {
      */
     private void sleepUntilWokenOrTimeout() {
         // TODO implement
-        // sleep();
+
+
+        synchronized (lock) {
+            long timeLeft = reshuffleTime - System.currentTimeMillis();
+            try {
+                lock.wait(timeLeft);
+            } catch (InterruptedException e) {}
+        }
     }
 
     /**
@@ -167,6 +176,17 @@ public class Dealer implements Runnable {
      */
     private void updateTimerDisplay(boolean reset) {
         // TODO implement
+        if (reset){
+            long restartTime = 60000;
+            reshuffleTime = System.currentTimeMillis() + restartTime;
+            env.ui.setCountdown(restartTime, false);
+            env.ui.setElapsed(0);
+        } else {
+            long timeLeft = reshuffleTime - System.currentTimeMillis(); 
+            boolean warn = timeLeft <= 5;
+            env.ui.setCountdown(timeLeft, warn);
+            env.ui.setElapsed(System.currentTimeMillis() - (reshuffleTime-60000));
+        }
     }
 
     /**

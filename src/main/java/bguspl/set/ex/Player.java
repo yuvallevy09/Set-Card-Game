@@ -111,7 +111,6 @@ public class Player implements Runnable {
                     }
                     dealer.checkPlayer = id; 
                     dealer.lock.notify();
-                    
                 } 
             }
         }
