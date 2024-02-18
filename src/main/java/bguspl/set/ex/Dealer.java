@@ -39,6 +39,14 @@ public class Dealer implements Runnable {
      * The time when the dealer needs to reshuffle the deck due to turn timeout.
      */
     private long reshuffleTime = Long.MAX_VALUE;
+
+    // lock
+    public Object lock = new Object();
+
+    public int[] cardsToCheck = new int[3]; // check if to make private and use set function 
+    public int checkPlayer;
+
+
     
     public Dealer(Env env, Table table, Player[] players) {
         this.env = env;
@@ -97,23 +105,25 @@ public class Dealer implements Runnable {
      */
     private void removeCardsFromTable() {
         // TODO implement
-        
+        synchronized(lock) {
+            if (env.util.testSet(cardsToCheck)) { // if legal set
+                for(int card : cardsToCheck)
+                {
+                    table.removeCard(table.cardToSlot[card]);
+                    table.removeToken(checkPlayer, table.cardToSlot[card]);
+                } 
+                player.point();
+            }
+             else {
+                player.penalty();
+            }
+        }            
+    }
 
-        for (Player player : players) {
-            if (player.getKeysPressed().remainingCapacity() == 0) { // if queue is full
-                int[] cards = keysToCards(player.getKeysPressed()); // transfer cards selected by player to array
-                if (env.util.testSet(cards)) { // if legal set 
-                    for (int slot : player.getKeysPressed()) {
-                        table.removeCard(slot);
-                        table.removeToken(player.getId(), slot);
-                    }
-                    player.point();
-                } else {
-                    for (int slot : player.getKeysPressed()) {
-                        table.removeToken(player.getId(), slot);
-                    }
-                    player.penalty();
-                }
+            for (Player player : players) {
+                if (player.getKeysPressed().remainingCapacity() == 0) { // if queue is full
+                    int[] cards = keysToCards(player.getKeysPressed()); // transfer cards selected by player to array
+                    
             }
         }
     }
