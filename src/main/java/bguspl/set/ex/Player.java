@@ -58,10 +58,12 @@ public class Player implements Runnable {
      */
     private int score;
 
-    //added by tomer
+    
     private ArrayBlockingQueue<Integer> keysPressed; // check what happens when inserting element beyond capacity
 
-    private boolean penalized;
+    private boolean penalized; //flag for whether the player got a penalty for announcing illegal set
+
+    public static Object playerLock = new Object();
 
     /**
      * The class constructor.
@@ -104,14 +106,10 @@ public class Player implements Runnable {
             
             if(keysPressed.remainingCapacity() == 0 && !penalized) //check if player put all 3 tokens on the table
             {
-                synchronized(dealer.lock) {
-                    int i = 0;
-                    for (int slot : keysPressed) {
-                        dealer.cardsToCheck[i] = table.slotToCard[slot];
-                    }
-                    dealer.checkPlayer = id; 
-                    dealer.lock.notify();
-                } 
+                // check if synchronization is needed
+                dealer.playersToCheckQueue.offer(this); //insert the player inside the queue
+                dealer.dealerLock.notify();
+
             }
         }
         if (!human) try { aiThread.join(); } catch (InterruptedException ignored) {}
@@ -154,9 +152,6 @@ public class Player implements Runnable {
      */
     public void keyPressed(int slot) {
         // TODO implement - Tomer
-
-        
-        //needs to check whether this player is penalized or freezed at the moment, if so do nothing, else correspond, might belong to Dealer.
         if(table.playersTokensLocations[id][slot] != -1) // if there is a token's player on this slot
         {
             table.removeToken(id, slot); //removes the token
@@ -181,16 +176,18 @@ public class Player implements Runnable {
      */
     public void point() {
         // TODO implement
-        synchronized(dealer.lock){
+        synchronized(dealer.dealerLock){
         // method is called from the dealer class once the player has completed a set
         //dealer is removing the cards from the table
         //freeze the player, probably by the dealer
         score++;
         env.ui.setFreeze(id, 1000);
+        keysPressed.clear();
         try {
             Thread.sleep(1000);
             } catch (InterruptedException e) {}
-        keysPressed.clear();
+        
+
         int ignored = table.countCards(); // this part is just for demonstration in the unit tests
         env.ui.setScore(id, ++score);
         }
@@ -201,7 +198,7 @@ public class Player implements Runnable {
      */
     public void penalty() {
         // TODO implement
-        synchronized(dealer.lock) {
+        synchronized(dealer.dealerLock) {
             penalized = true;
             env.ui.setFreeze(id, 3000);
             try {
@@ -219,7 +216,7 @@ public class Player implements Runnable {
         return keysPressed;
     }
 
-    public int getId()
+    public int getId() //returns player's id
     {
         return id;
     }

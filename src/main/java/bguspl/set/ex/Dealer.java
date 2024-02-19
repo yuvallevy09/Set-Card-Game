@@ -5,8 +5,6 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import java.util.concurrent.ArrayBlockingQueue;
-
 
 /**
  * This class manages the dealer's threads and data
@@ -41,10 +39,11 @@ public class Dealer implements Runnable {
     private long reshuffleTime = Long.MAX_VALUE;
 
     // lock
-    public Object lock = new Object();
+    public Object dealerLock = new Object();
 
-    public int[] cardsToCheck = new int[3]; // check if to make private and use set function 
+    private int[] cardsToCheck = new int[3]; // check if to make private and use set function 
     public int checkPlayer;
+    public Queue<Player> playersToCheckQueue = new LinkedList<>(); //Queue for the order which the dealer will check the players
 
   
 
@@ -107,39 +106,56 @@ public class Dealer implements Runnable {
      */
     private void removeCardsFromTable() {
         // TODO implement
-        synchronized(lock) {
-            if (env.util.testSet(cardsToCheck)) { // if legal set
+        synchronized(dealerLock) {
+            Player currPlayer = playersToCheckQueue.poll(); //Dealer checks player set right now, thus needs to remove player from waiting list
+            int i = 0;
+            for (int slot : currPlayer.getKeysPressed()) {
+                cardsToCheck[i] = table.slotToCard[slot];
+                i++;
+            }
+            if (env.util.testSet(cardsToCheck)) // if legal set
+            { 
                 for(int card : cardsToCheck)
                 {
-                    table.removeCard(table.cardToSlot[card]);
-                    table.removeToken(checkPlayer, table.cardToSlot[card]);
-                } 
-                player.point();
+                    table.removeCard(table.cardToSlot[card]); // remove card from table
+                    for (Player player : players){
+                        // if other players had a shared card, remove their token and remove them from playersToCheckQueue, since set is no longer relevant
+                        if (player.getKeysPressed().contains(card)) { 
+                            table.removeToken(player.getId(), table.cardToSlot[card]);
+                            player.getKeysPressed().remove(card);
+                            if (playersToCheckQueue.contains(player)){
+                                playersToCheckQueue.remove(player);
+                            }
+                        }
+                    }
+                }
+                currPlayer.point(); //player gets a point
             }
-             else {
-                player.penalty();
-            }
+            else 
+            {
+                currPlayer.penalty(); //player gets penalized
+            } 
         }            
     }
 
-            for (Player player : players) {
-                if (player.getKeysPressed().remainingCapacity() == 0) { // if queue is full
-                    int[] cards = keysToCards(player.getKeysPressed()); // transfer cards selected by player to array
+    //         for (Player player : players) {
+    //             if (player.getKeysPressed().remainingCapacity() == 0) { // if queue is full
+    //                 int[] cards = keysToCards(player.getKeysPressed()); // transfer cards selected by player to array
                     
-            }
-        }
-    }
+    //         }
+    //     }
+    // }
 
-    private int[] keysToCards (ArrayBlockingQueue<Integer> keysPressed) { 
-        int[] setOfCards = new int[3];
-        int i = 0;
-        for(Integer slot : keysPressed)
-        {
-            setOfCards[i] = table.slotToCard[slot];
-            i++; 
-        }
-        return setOfCards;
-    }
+    // private int[] keysToCards (ArrayBlockingQueue<Integer> keysPressed) { 
+    //     int[] setOfCards = new int[3];
+    //     int i = 0;
+    //     for(Integer slot : keysPressed)
+    //     {
+    //         setOfCards[i] = table.slotToCard[slot];
+    //         i++; 
+    //     }
+    //     return setOfCards;
+    // }
 
     /**
      * Check if any cards can be removed from the deck and placed on the table.
@@ -161,12 +177,11 @@ public class Dealer implements Runnable {
      */
     private void sleepUntilWokenOrTimeout() {
         // TODO implement
-
-
-        synchronized (lock) {
+        
+        synchronized (dealerLock) {
             long timeLeft = reshuffleTime - System.currentTimeMillis();
             try {
-                lock.wait(timeLeft);
+                dealerLock.wait(timeLeft);
             } catch (InterruptedException e) {}
         }
     }
