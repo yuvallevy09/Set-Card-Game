@@ -1,6 +1,9 @@
 package bguspl.set.ex;
 
 import bguspl.set.Env;
+
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue; // imported by tomer to create a queue for player's actions
 
 import javax.swing.Action;
@@ -58,7 +61,8 @@ public class Player implements Runnable {
      */
     private int score;
 
-    
+    private boolean relevantSetAI;
+
     private ArrayBlockingQueue<Integer> keysPressed; // check what happens when inserting element beyond capacity
 
     private boolean penalized; //flag for whether the player got a penalty for announcing illegal set
@@ -109,7 +113,6 @@ public class Player implements Runnable {
                 // check if synchronization is needed
                 dealer.playersToCheckQueue.offer(this); //insert the player inside the queue
                 dealer.dealerLock.notify();
-
             }
         }
         if (!human) try { aiThread.join(); } catch (InterruptedException ignored) {}
@@ -126,8 +129,20 @@ public class Player implements Runnable {
             env.logger.info("thread " + Thread.currentThread().getName() + " starting.");
             while (!terminate) {
                 // TODO implement player key press simulator
-                
-                
+                boolean setFound = false;
+                while(!terminate & !setFound) {
+                    int[] set = findSetOnTable();
+                    int i = 0;
+                    while(keysPressed.remainingCapacity() > 0 & relevantSetAI){
+                        keyPressed(table.cardToSlot[set[i]]);
+                        i++;
+                    }
+                    if (relevantSetAI){
+                        setFound = true;
+                    } else {
+                        keysPressed.clear();
+                    }
+                }
                 try {
                     synchronized (this) { wait(); }
                 } catch (InterruptedException ignored) {}
@@ -136,6 +151,20 @@ public class Player implements Runnable {
         }, "computer-" + id);
         aiThread.start();
     }
+
+    private int[] findSetOnTable(){
+        relevantSetAI = true;
+        List<Integer> cardsOnTable = new ArrayList<>();
+        for (Integer card : table.slotToCard) {
+            if(card != null)
+            {
+                cardsOnTable.add(card);
+            }
+        }
+        List<int[]> set = env.util.findSets(cardsOnTable, 1);
+        return set.get(0);
+    }
+
 
     /**
      * Called when the game should be terminated.
@@ -216,9 +245,17 @@ public class Player implements Runnable {
         return keysPressed;
     }
 
-    public int getId() //returns player's id
-    {
-        return id;
+
+    public void removeKeyPressed(int slot) { // removes the slot that was chosen with the key from the Q
+        keysPressed.remove(slot);
+    } 
+
+    public void setRelevantSetAI(boolean bool) { // removes the slot that was chosen with the key from the Q
+        relevantSetAI = bool;
+    }
+
+    public boolean isAI(){
+        return !human;
     }
 
 }

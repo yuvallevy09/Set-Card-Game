@@ -120,11 +120,15 @@ public class Dealer implements Runnable {
                     table.removeCard(table.cardToSlot[card]); // remove card from table
                     for (Player player : players){
                         // if other players had a shared card, remove their token and remove them from playersToCheckQueue, since set is no longer relevant
-                        if (player.getKeysPressed().contains(card)) { 
-                            table.removeToken(player.getId(), table.cardToSlot[card]);
-                            player.getKeysPressed().remove(card);
+                        if (player.getKeysPressed().contains(table.cardToSlot[card])) { 
+                            table.removeToken(player.id, table.cardToSlot[card]);
+                            player.removeKeyPressed(table.cardToSlot[card]);
                             if (playersToCheckQueue.contains(player)){
                                 playersToCheckQueue.remove(player);
+                            }
+                            if (player.isAI()){
+                                player.setRelevantSetAI(false);
+                               // player.aiThread.notify(); // check
                             }
                         }
                     }
@@ -177,12 +181,17 @@ public class Dealer implements Runnable {
      */
     private void sleepUntilWokenOrTimeout() {
         // TODO implement
-        
+        //check if needs synchronization since theres only one dealer thread
         synchronized (dealerLock) {
             long timeLeft = reshuffleTime - System.currentTimeMillis();
+            if(timeLeft > 0){
             try {
                 dealerLock.wait(timeLeft);
-            } catch (InterruptedException e) {}
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+           
+            }
         }
     }
 
@@ -238,10 +247,10 @@ public class Dealer implements Runnable {
                 winners.clear();
                 maxScore = playerScore;
                 // Add the current player to the winners list
-                winners.add(player.getId());
+                winners.add(player.id);
             } else if (playerScore == maxScore) {
                 // Another player has the same score as the current maximum, add them to winners list
-                winners.add(player.getId());
+                winners.add(player.id);
             }
         }
     
