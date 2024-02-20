@@ -44,6 +44,7 @@ public class Dealer implements Runnable {
     private int[] cardsToCheck = new int[3]; // check if to make private and use set function 
     public int checkPlayer;
     public Queue<Player> playersToCheckQueue = new LinkedList<>(); //Queue for the order which the dealer will check the players
+    //public Thread dealerThread;
 
   
 
@@ -54,14 +55,25 @@ public class Dealer implements Runnable {
         this.table = table;
         this.players = players;
         deck = IntStream.range(0, env.config.deckSize).boxed().collect(Collectors.toList());
+        terminate = false;
+        //check if needs to update reshuffle time here or in the run method
     }
+
+    // public void startPlayersThreads(Player[] players){
+    //     for(Player player : players){
+    //         player.playerThread = new Thread(player.getThread(player.isHuman()))
+    //     }
+    // }
 
     /**
      * The dealer thread starts here (main loop for the dealer thread).
      */
     @Override
     public void run() {
+        Collections.shuffle(deck);  // Shuffle deck
         env.logger.info("thread " + Thread.currentThread().getName() + " starting.");
+        // needs to initialize player threads here according to flow chart
+        
         while (!shouldFinish()) {
             placeCardsOnTable();
             timerLoop();
@@ -115,6 +127,7 @@ public class Dealer implements Runnable {
             }
             if (env.util.testSet(cardsToCheck)) // if legal set
             { 
+                currPlayer.legalSet = true; // announce the player that he build a legal set
                 for(int card : cardsToCheck)
                 {
                     table.removeCard(table.cardToSlot[card]); // remove card from table
@@ -133,12 +146,15 @@ public class Dealer implements Runnable {
                         }
                     }
                 }
-                currPlayer.point(); //player gets a point
+                dealerLock.notifyAll();
+                currPlayer.isWaiting = false; // now the player will exit his loop and move on with the run method
+            //     // currPlayer.point(); //player gets a point ------ moved the method into Player beacuse we want player thread to run the method
+            // }
+            // else 
+            // {
+            //     //currPlayer.penalty(); //player gets penalized ------ moved the method into Player beacuse we want player thread to run the method
+            // } 
             }
-            else 
-            {
-                currPlayer.penalty(); //player gets penalized
-            } 
         }            
     }
 
@@ -166,13 +182,13 @@ public class Dealer implements Runnable {
      */
     private void placeCardsOnTable() {
         // TODO implement - yuval 
+        int i = 0;
         while (!deck.isEmpty() & table.countCards() < 12) { 
-            int card = deck.remove(0);
-            for (Integer slot : table.slotToCard) { 
-                if (table.slotToCard[slot] == null) {
-                    table.placeCard(card, slot);
-                }
+            if (table.slotToCard[i] == null) {
+                int card = deck.remove(0);
+                table.placeCard(card, i);
             }
+            i++;
         }
     }
 
@@ -181,16 +197,18 @@ public class Dealer implements Runnable {
      */
     private void sleepUntilWokenOrTimeout() {
         // TODO implement
-        //check if needs synchronization since theres only one dealer thread
-        synchronized (dealerLock) {
+       
+        synchronized (dealerLock) { // synchronized on the dealerLock, then puts him to wait on this lock until he gets notified 
             long timeLeft = reshuffleTime - System.currentTimeMillis();
             if(timeLeft > 0){
             try {
                 dealerLock.wait(timeLeft);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
+            } catch (InterruptedException e) {}
            
+            }
+            else // means timeLeft == 0
+            { 
+                Collections.shuffle(deck); // reshuffles the deck
             }
         }
     }
