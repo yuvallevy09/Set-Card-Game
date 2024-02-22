@@ -61,16 +61,14 @@ public class Player implements Runnable {
      */
     private int score;
 
-    private boolean relevantSetAI;
 
     private ArrayBlockingQueue<Integer> keysPressed; // check what happens when inserting element beyond capacity
 
     private boolean penalized; //flag for whether the player got a penalty for announcing illegal set
 
     public static Object playerLock = new Object();
-
-    public boolean isWaiting = true; // check if its better to announce as private
-    public boolean legalSet = false; // check if its better to announce as private
+    private boolean checked;
+    private long freezeTime;
 
     /**
      * The class constructor.
@@ -103,37 +101,35 @@ public class Player implements Runnable {
 
         while (!terminate) {
             // TODO implement main player loop
-          
-                
-            // if we have 3 cards, ask the dealer whether we have a set or not.
-            //needs to hold somehow all 3 cards that the player ask dealer if they are a set
-            
-            if(keysPressed.remainingCapacity() == 0 && !penalized) //check if player put all 3 tokens on the table
-            {
-                dealer.playersToCheckQueue.offer(this); //insert the player inside the queue , check if needs to by before synchronized
-                
-                synchronized(dealer.dealerLock){
-                dealer.dealerLock.notifyAll(); // releases the dealer from been blocked on sleepUntilWakenOrTimeout
-                while(isWaiting){
-                    try {
-                        dealer.dealerLock.wait(); // insert the current thread to blocking on the dealerLock key.
-                    } catch (InterruptedException e) {}
-                } 
-                    isWaiting = true; // reset isWaiting for the next time this player thread will enter the method, 
-                    // this boolean changes inside the dealer class to false after he checks whether the set is legal.
-                    if(legalSet)
-                    {
-                        point();
-                    }
-                    else
-                    {
-                        penalty();
-                    }
-                }
-              
 
+            checked = false;
+
+            while (keysPressed.remainingCapacity() > 0 | penalized) {
+                try {
+                    synchronized(this) {wait();} // wake up player thread when key is pressed 
+                } catch (InterruptedException e) {}
+            }
+            dealer.playersToCheckQueue.offer(this); 
+
+            synchronized(playerLock) { // since only one player can be handled by the dealer at once 
+                if (!dealer.playersToCheckQueue.contains(this)) { // if player was removed from checking queue
+                    continue;
                 }
-            
+                synchronized(dealer.dealerLock){ 
+                    dealer.dealerLock.notify(); // wakes up dealer in sleepUntilWokenOrTimeout
+                    try {
+                        dealer.dealerLock.wait(); // current player thread returns key to monitor, enters waiting set, and allows dealerThread to enter
+                    } catch (InterruptedException ignored) {}
+                }
+            } 
+            if (!checked){
+                try {
+                    synchronized(this) {wait();} // woken up when checked 
+                } catch (InterruptedException e) {}
+            }
+            try {
+                Thread.sleep(freezeTime); 
+            } catch (InterruptedException e) {}
         }
         if (!human) try { aiThread.join(); } catch (InterruptedException ignored) {}
         env.logger.info("thread " + Thread.currentThread().getName() + " terminated.");
@@ -149,19 +145,9 @@ public class Player implements Runnable {
             env.logger.info("thread " + Thread.currentThread().getName() + " starting.");
             while (!terminate) {
                 // TODO implement player key press simulator
-                boolean setFound = false;
-                while(!terminate & !setFound) {
-                    int[] set = findSetOnTable();
-                    int i = 0;
-                    while(keysPressed.remainingCapacity() > 0 & relevantSetAI){
-                        keyPressed(table.cardToSlot[set[i]]);
-                        i++;
-                    }
-                    if (relevantSetAI){
-                        setFound = true;
-                    } else {
-                        keysPressed.clear();
-                    }
+                while(keysPressed.remainingCapacity() > 0 | penalized){
+                    int x = (int)(Math.random()*12);
+                    keyPressed(x);  
                 }
                 try {
                     synchronized (this) { wait(); }
@@ -172,18 +158,17 @@ public class Player implements Runnable {
         aiThread.start();
     }
 
-    private int[] findSetOnTable(){
-        relevantSetAI = true;
-        List<Integer> cardsOnTable = new ArrayList<>();
-        for (Integer card : table.slotToCard) {
-            if(card != null)
-            {
-                cardsOnTable.add(card);
-            }
-        }
-        List<int[]> set = env.util.findSets(cardsOnTable, 1);
-        return set.get(0);
-    }
+    // private int[] findSetOnTable(){
+    //     List<Integer> cardsOnTable = new ArrayList<>();
+    //     for (Integer card : table.slotToCard) {
+    //         if(card != null)
+    //         {
+    //             cardsOnTable.add(card);
+    //         }
+    //     }
+    //     List<int[]> set = env.util.findSets(cardsOnTable, 1);
+    //     return set.get(0);
+   // }
 
 
     /**
@@ -213,6 +198,9 @@ public class Player implements Runnable {
         {
             table.placeToken(id, slot); // adds the player's token to the slot on the table
             keysPressed.offer(slot);
+            synchronized(this) {
+                notify();  // wakes up playerThread which is waiting in the player instance monitor
+            }
         }
     
     }
@@ -225,19 +213,14 @@ public class Player implements Runnable {
      */
     public void point() {
         // TODO implement
-        synchronized(playerLock){  //Since score is a sharedVariable and we dont want other threads to change each other points
-        //check if needs to be synchrnoized on a different key, since its a nested locks
-        
         score++;
         env.ui.setFreeze(id, 1000);
         keysPressed.clear();
-        try {
-            Thread.sleep(1000); //player can't play for 1 second
-            } catch (InterruptedException e) {}
-        
+        freezeTime = 1000;
+        checked = true;
+        synchronized(this) {notify();} // releases thread if not checked 
         int ignored = table.countCards(); // this part is just for demonstration in the unit tests
         env.ui.setScore(id, ++score);
-        }
     }
 
     /**
@@ -245,13 +228,11 @@ public class Player implements Runnable {
      */
     public void penalty() {
         // TODO implement
-        synchronized(playerLock) { //check if needs to be synchrnoized on a different key, since its a nested locks
-            penalized = true;
-            env.ui.setFreeze(id, 3000);
-            try {
-                Thread.sleep(3000);
-            } catch (InterruptedException e) {}
-        }    
+        penalized = true;
+        env.ui.setFreeze(id, 3000); // see if need to move to run()
+        freezeTime = 3000;
+        checked = true;
+        synchronized(this) {notify();} // releases thread if not checked 
     }
 
     public int score() { // dealer threads activate this method
@@ -268,10 +249,6 @@ public class Player implements Runnable {
         keysPressed.remove(slot);
     } 
 
-    public void setRelevantSetAI(boolean bool) { // removes the slot that was chosen with the key from the Q
-        relevantSetAI = bool;
-    }
-
     public boolean isAI(){
         return !human;
     }
@@ -286,7 +263,3 @@ public class Player implements Runnable {
     }
 
 }
-    
-
-
-  

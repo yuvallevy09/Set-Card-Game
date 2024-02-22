@@ -46,6 +46,8 @@ public class Dealer implements Runnable {
     public Queue<Player> playersToCheckQueue = new LinkedList<>(); //Queue for the order which the dealer will check the players
     //public Thread dealerThread;
 
+    private long timeLeft;
+
   
 
 
@@ -56,7 +58,6 @@ public class Dealer implements Runnable {
         this.players = players;
         deck = IntStream.range(0, env.config.deckSize).boxed().collect(Collectors.toList());
         terminate = false;
-        //check if needs to update reshuffle time here or in the run method
     }
 
     // public void startPlayersThreads(Player[] players){
@@ -70,14 +71,18 @@ public class Dealer implements Runnable {
      */
     @Override
     public void run() {
-        Collections.shuffle(deck);  // Shuffle deck
         env.logger.info("thread " + Thread.currentThread().getName() + " starting.");
-        // needs to initialize player threads here according to flow chart
+
+        for (Player player : players) { // creates player threads 
+            Thread playerThread = new Thread(player);
+            playerThread.start();
+        }
         
         while (!shouldFinish()) {
-            placeCardsOnTable();
+            Collections.shuffle(deck);  // Shuffle deck
+            placeCardsOnTable(); 
             timerLoop();
-            updateTimerDisplay(false);
+            updateTimerDisplay(true);
             removeAllCardsFromTable();
         }
         announceWinners();
@@ -90,8 +95,8 @@ public class Dealer implements Runnable {
     private void timerLoop() {
         while (!terminate && System.currentTimeMillis() < reshuffleTime) {
             sleepUntilWokenOrTimeout();
-            updateTimerDisplay(false);
-            removeCardsFromTable();
+            updateTimerDisplay(false); // check if need to return reset boolean 
+            removeCardsFromTable(); 
             placeCardsOnTable();
         }
     }
@@ -127,7 +132,6 @@ public class Dealer implements Runnable {
             }
             if (env.util.testSet(cardsToCheck)) // if legal set
             { 
-                currPlayer.legalSet = true; // announce the player that he build a legal set
                 for(int card : cardsToCheck)
                 {
                     table.removeCard(table.cardToSlot[card]); // remove card from table
@@ -138,25 +142,19 @@ public class Dealer implements Runnable {
                             player.removeKeyPressed(table.cardToSlot[card]);
                             if (playersToCheckQueue.contains(player)){
                                 playersToCheckQueue.remove(player);
-                            }
-                            if (player.isAI()){
-                                player.setRelevantSetAI(false);
-                               // player.aiThread.notify(); // check
+                                // check how to remove players from playerLock monitor 
                             }
                         }
                     }
                 }
-                dealerLock.notifyAll();
-                currPlayer.isWaiting = false; // now the player will exit his loop and move on with the run method
-            //     // currPlayer.point(); //player gets a point ------ moved the method into Player beacuse we want player thread to run the method
-            // }
-            // else 
-            // {
-            //     //currPlayer.penalty(); //player gets penalized ------ moved the method into Player beacuse we want player thread to run the method
-            // } 
+                currPlayer.point(); //player gets a point
+                updateTimerDisplay(true);
+            } else {
+                currPlayer.penalty(); //player gets penalized
             }
-        }            
-    }
+            dealerLock.notify();     
+        } 
+    }            
 
     //         for (Player player : players) {
     //             if (player.getKeysPressed().remainingCapacity() == 0) { // if queue is full
@@ -197,19 +195,10 @@ public class Dealer implements Runnable {
      */
     private void sleepUntilWokenOrTimeout() {
         // TODO implement
-       
         synchronized (dealerLock) { // synchronized on the dealerLock, then puts him to wait on this lock until he gets notified 
-            long timeLeft = reshuffleTime - System.currentTimeMillis();
-            if(timeLeft > 0){
             try {
-                dealerLock.wait(timeLeft);
+                dealerLock.wait(1000); // since needs to update the clock every second 
             } catch (InterruptedException e) {}
-           
-            }
-            else // means timeLeft == 0
-            { 
-                Collections.shuffle(deck); // reshuffles the deck
-            }
         }
     }
 
@@ -219,12 +208,12 @@ public class Dealer implements Runnable {
     private void updateTimerDisplay(boolean reset) {
         // TODO implement
         if (reset){
-            long restartTime = 60000;
-            reshuffleTime = System.currentTimeMillis() + restartTime;
-            env.ui.setCountdown(restartTime, false);
+            timeLeft = 60000;
+            reshuffleTime = System.currentTimeMillis() + timeLeft;
+            env.ui.setCountdown(timeLeft, false);
             env.ui.setElapsed(0);
         } else {
-            long timeLeft = reshuffleTime - System.currentTimeMillis(); 
+            timeLeft = reshuffleTime - System.currentTimeMillis(); 
             boolean warn = timeLeft <= 5;
             env.ui.setCountdown(timeLeft, warn);
             env.ui.setElapsed(System.currentTimeMillis() - (reshuffleTime-60000));
@@ -257,7 +246,7 @@ public class Dealer implements Runnable {
         // TODO implement
         int maxScore = Integer.MIN_VALUE;
         List<Integer> winners = new ArrayList<>();
-    
+        
         for (Player player : players) {
             int playerScore = player.score();
             if (playerScore > maxScore) {
@@ -271,7 +260,7 @@ public class Dealer implements Runnable {
                 winners.add(player.id);
             }
         }
-    
+        
         // Convert the list of winners to an array
         int[] arrayOfWinners = winners.stream().mapToInt(Integer::intValue).toArray();
         

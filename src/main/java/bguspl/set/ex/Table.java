@@ -43,11 +43,15 @@ public class Table {
         this.env = env;
         this.slotToCard = slotToCard;
         this.cardToSlot = cardToSlot;
+        for(int i = 0; i <= 11; i++){
+            slotToCard[i] = null;
+            cardToSlot[i] = null;
+        }
 
         playersTokensLocations = new Integer[env.config.players][12]; // Creates an 2D array in size of the numbers of players * num of slots on table
-        for(int i = 0; i <= env.config.players; i++)
+        for(int i = 0; i < env.config.players; i++)
         {
-            for(int j = 0; j < 12; j++)
+            for(int j = 0; j <= 11; j++)
             {
                 playersTokensLocations[i][j] = -1; //Initialize all cells to -1, means no token is set on the table yet
             }
