@@ -12,7 +12,11 @@ with a short description of:
 
 1. Fully supporting all configuration fields and avoiding the use of magic numbers
 
-We are not entitled to this bonus.
+1. We declared the sizes of the relevant data structures that depend on the configuration properties by using env.config fields.
+2. In table, we used the config fields in the constructor to construct an array that represent the token locations. 
+    In player we defined the freezetime using the relevant config field in point and penalty. 
+    In dealer, we defined the cards to check array using the config feature size. These are just a couple of examples.
+3. We changed the game settings in the config properties and ran the code.
 
 --------------------
 
@@ -35,4 +39,11 @@ We are not entitled to this bonus.
 changed on the display, key input needs to be handled, etc.) and the only threads created by you are:
 1 thread per player + 1 additional thread for non-human players.
 
-We are not entitled to this bonus.
+1. First note that we used an array blocking queue for keys pressed. This puts the aiThread into the blocked state until we clear its keys. 
+The dealer thread sleeps until it has to update the timer display, check a players set, or do other actions such as reshuffle the deck and place new cards.
+When a player thread completes a set, it is put into wait and only activated once the dealer notifies it that it can continue. 
+Also, between removing all cards and the start of a new round, players are put into wait until the table is ready to be played on again.
+
+2. As mentioned above, we implemented these actions in player run and dealer run. 
+
+3. We used the Thread logger and print statments to check the threads went to sleep. 

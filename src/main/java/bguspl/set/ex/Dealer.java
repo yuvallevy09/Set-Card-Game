@@ -2,6 +2,7 @@ package bguspl.set.ex;
 
 import bguspl.set.Env;
 import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -41,15 +42,15 @@ public class Dealer implements Runnable {
     // lock
     public Object dealerLock = new Object();
 
-    private int[] cardsToCheck = new int[3]; // check if to make private and use set function 
+    private int[] cardsToCheck; // check if to make private and use set function 
     public int checkPlayer;
-    public Queue<Player> playersToCheckQueue = new LinkedList<>(); //Queue for the order which the dealer will check the players
-    //public Thread dealerThread;
-
+    public ConcurrentLinkedQueue<Player> playersToCheckQueue = new ConcurrentLinkedQueue<>(); //Thread safe Q for the order which the dealer will check the players
+    public boolean canPlay; //flag that says whether players can play or. didnt use it in player run yet!
     private long timeLeft;
-
-  
-
+    private long startTime;
+    public long currentTime;
+    private boolean warn;
+    public Thread dealerThread;
 
     
     public Dealer(Env env, Table table, Player[] players) {
@@ -58,13 +59,10 @@ public class Dealer implements Runnable {
         this.players = players;
         deck = IntStream.range(0, env.config.deckSize).boxed().collect(Collectors.toList());
         terminate = false;
+        canPlay = false;
+        cardsToCheck = new int[env.config.featureSize];
+        warn = false;
     }
-
-    // public void startPlayersThreads(Player[] players){
-    //     for(Player player : players){
-    //         player.playerThread = new Thread(player.getThread(player.isHuman()))
-    //     }
-    // }
 
     /**
      * The dealer thread starts here (main loop for the dealer thread).
@@ -72,20 +70,30 @@ public class Dealer implements Runnable {
     @Override
     public void run() {
         env.logger.info("thread " + Thread.currentThread().getName() + " starting.");
+        dealerThread = Thread.currentThread();
 
-        for (Player player : players) { // creates player threads 
-            Thread playerThread = new Thread(player);
+        for(int i = 0; i < env.config.players; i++) {
+            Thread playerThread = new Thread( players[i], env.config.playerNames[i]);
             playerThread.start();
         }
         
         while (!shouldFinish()) {
             Collections.shuffle(deck);  // Shuffle deck
-            placeCardsOnTable(); 
-            timerLoop();
+            placeCardsOnTable();
             updateTimerDisplay(true);
+            canPlay = true;
+            activatePlayers();
+            if (env.config.hints){
+                table.hints();} // shows set hints to the output of the program
+            timerLoop();
+            canPlay = false;
             removeAllCardsFromTable();
         }
+
         announceWinners();
+        if (!terminate) {
+            terminate();
+        }
         env.logger.info("thread " + Thread.currentThread().getName() + " terminated.");
     }
 
@@ -95,8 +103,8 @@ public class Dealer implements Runnable {
     private void timerLoop() {
         while (!terminate && System.currentTimeMillis() < reshuffleTime) {
             sleepUntilWokenOrTimeout();
-            updateTimerDisplay(false); // check if need to return reset boolean 
-            removeCardsFromTable(); 
+            updateTimerDisplay(false);
+            removeCardsFromTable();
             placeCardsOnTable();
         }
     }
@@ -106,7 +114,12 @@ public class Dealer implements Runnable {
      */
     public void terminate() {
         // TODO implement
-        // end thread proccesses in proper fashion 
+        // end thread proccesses in proper fashion
+        terminate = true;
+
+        for(int i = env.config.players - 1; i >= 0; i--) {
+            players[i].terminate();
+        }
     }
 
     /**
@@ -118,70 +131,76 @@ public class Dealer implements Runnable {
         return terminate || env.util.findSets(deck, 1).size() == 0;
     }
 
-   /**
-     * Checks cards should be removed from the table and removes them.
-     */
-    private void removeCardsFromTable() {
-        // TODO implement
-        synchronized(dealerLock) {
-            Player currPlayer = playersToCheckQueue.poll(); //Dealer checks player set right now, thus needs to remove player from waiting list
-            int i = 0;
-            for (int slot : currPlayer.getKeysPressed()) {
+/**
+ * Checks cards should be removed from the table and removes them.
+ */
+private void removeCardsFromTable() {
+    // TODO implement
+    if(!playersToCheckQueue.isEmpty()){
+        Player currPlayer = playersToCheckQueue.poll(); // The player that the dealer checks his set
+        ArrayList<Player> kickPlayers = new ArrayList<>(); // store all players that needs to be kicked out of the playerToCheckQ
+        int i = 0;
+        for(int slot = 0; slot < env.config.tableSize; slot++){
+ 
+            if(table.playersTokensLocations[currPlayer.id][slot] == 1){
                 cardsToCheck[i] = table.slotToCard[slot];
                 i++;
             }
-            if (env.util.testSet(cardsToCheck)) // if legal set
-            { 
-                for(int card : cardsToCheck)
-                {
-                    table.removeCard(table.cardToSlot[card]); // remove card from table
+        }
+        if (env.util.testSet(cardsToCheck)) // if legal set
+        { 
+            for(int card : cardsToCheck)
+            {
+                int slot = table.cardToSlot[card];
+                synchronized(table.lock[slot]){ //locks the cell where the dealer now performs an action
+                
                     for (Player player : players){
+                        int id = player.id;
                         // if other players had a shared card, remove their token and remove them from playersToCheckQueue, since set is no longer relevant
-                        if (player.getKeysPressed().contains(table.cardToSlot[card])) { 
-                            table.removeToken(player.id, table.cardToSlot[card]);
-                            player.removeKeyPressed(table.cardToSlot[card]);
+                        if(table.playersTokensLocations[id][slot] == 1){
+                            table.removeToken(id, slot);
+                            player.tokensLeft++;
                             if (playersToCheckQueue.contains(player)){
                                 playersToCheckQueue.remove(player);
-                                // check how to remove players from playerLock monitor 
+                                kickPlayers.add(player);
+                                
                             }
-                        }
+                        } 
+                    }
+                    table.removeCard(slot); // remove card from table
+                }
+            }   
+            if (env.config.hints)
+                table.hints();
+            currPlayer.point(); //player gets a point
+            updateTimerDisplay(true);
+            synchronized(currPlayer){
+                currPlayer.notify();
+            }
+            for(Player player : kickPlayers){
+                if(player.id != currPlayer.id){
+                    player.freezeTime = 0;
+                    synchronized(player){
+                        player.notify(); // players who dont have set anymore will now continue to play
                     }
                 }
-                currPlayer.point(); //player gets a point
-                updateTimerDisplay(true);
-            } else {
-                currPlayer.penalty(); //player gets penalized
             }
-            dealerLock.notify();     
-        } 
-    }            
-
-    //         for (Player player : players) {
-    //             if (player.getKeysPressed().remainingCapacity() == 0) { // if queue is full
-    //                 int[] cards = keysToCards(player.getKeysPressed()); // transfer cards selected by player to array
-                    
-    //         }
-    //     }
-    // }
-
-    // private int[] keysToCards (ArrayBlockingQueue<Integer> keysPressed) { 
-    //     int[] setOfCards = new int[3];
-    //     int i = 0;
-    //     for(Integer slot : keysPressed)
-    //     {
-    //         setOfCards[i] = table.slotToCard[slot];
-    //         i++; 
-    //     }
-    //     return setOfCards;
-    // }
+        } else {
+            currPlayer.penalty(); //player gets penalized
+            synchronized(currPlayer){
+                currPlayer.notify();
+            }
+        }
+    }    
+}   
 
     /**
      * Check if any cards can be removed from the deck and placed on the table.
      */
     private void placeCardsOnTable() {
-        // TODO implement - yuval 
+        // TODO implement 
         int i = 0;
-        while (!deck.isEmpty() & table.countCards() < 12) { 
+        while (!deck.isEmpty() & table.countCards() < env.config.tableSize) { 
             if (table.slotToCard[i] == null) {
                 int card = deck.remove(0);
                 table.placeCard(card, i);
@@ -190,81 +209,120 @@ public class Dealer implements Runnable {
         }
     }
 
-    /**
-     * Sleep for a fixed amount of time or until the thread is awakened for some purpose.
-     */
-    private void sleepUntilWokenOrTimeout() {
-        // TODO implement
-        synchronized (dealerLock) { // synchronized on the dealerLock, then puts him to wait on this lock until he gets notified 
-            try {
-                dealerLock.wait(1000); // since needs to update the clock every second 
+/**
+ * Sleep for a fixed amount of time or until the thread is awakened for some purpose.
+ */
+private void sleepUntilWokenOrTimeout() {
+    // TODO implement
+
+    timeLeft = reshuffleTime - System.currentTimeMillis();
+    if (playersToCheckQueue.isEmpty()) {
+        if (!warn) {
+            try{
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {}
+        } else {
+            try{
+                Thread.sleep(10);
             } catch (InterruptedException e) {}
         }
     }
+}
 
-    /**
-     * Reset and/or update the countdown and the countdown display.
-     */
-    private void updateTimerDisplay(boolean reset) {
-        // TODO implement
-        if (reset){
-            timeLeft = 60000;
-            reshuffleTime = System.currentTimeMillis() + timeLeft;
-            env.ui.setCountdown(timeLeft, false);
-            env.ui.setElapsed(0);
-        } else {
-            timeLeft = reshuffleTime - System.currentTimeMillis(); 
-            boolean warn = timeLeft <= 5;
-            env.ui.setCountdown(timeLeft, warn);
-            env.ui.setElapsed(System.currentTimeMillis() - (reshuffleTime-60000));
+/**
+ * Reset and/or update the countdown and the countdown display.
+ */
+private void updateTimerDisplay(boolean reset) {
+    if (reset) {
+        startTime = System.currentTimeMillis();
+        timeLeft = env.config.turnTimeoutMillis;
+        reshuffleTime = startTime + timeLeft;
+        warn = false;
+        env.ui.setCountdown(timeLeft, warn);
+    } else {
+        currentTime = System.currentTimeMillis();
+        timeLeft = reshuffleTime - currentTime;
+        warn = timeLeft <= env.config.turnTimeoutWarningMillis;
+        if(timeLeft <= 0 ){
+            timeLeft = 0;
         }
-    }
+        env.ui.setCountdown(timeLeft, warn);
 
-    /**
-     * Returns all the cards from the table to the deck.
-     */
-    private void removeAllCardsFromTable() {
-        // TODO implement - Yuval
-        for (Integer slot : table.slotToCard) { 
-            if (table.slotToCard[slot] != null) { // if slot is not empty
-                deck.add(table.slotToCard[slot]); // add card back to deck 
-                table.removeCard(slot); // remove card from slot on table 
-                for (int player = 0; player < 12; player++) { // remove tokens from slot
-                    if (table.playersTokensLocations[player][slot] == 1) {
-                        table.removeToken(player, slot);
-                    }
+        for(Player player : players){
+            if(player.isFrozen){
+                long freezeDisplay = (long) Math.ceil((double) (player.unfreezeTime - currentTime) / 1000) * 1000;
+
+                if(freezeDisplay <= 0){
+                    player.isFrozen = false;
+                }
+                env.ui.setFreeze(player.id, freezeDisplay);
+            }
+        }
+
+
+    }
+}
+
+/**
+ * Returns all the cards from the table to the deck.
+ */
+private void removeAllCardsFromTable() {
+    // TODO implement 
+    for (Integer card : table.slotToCard) { 
+        if (card != null) {
+            deck.add(card); // add card back to deck 
+            int slot = table.cardToSlot[card];
+            synchronized(table.lock[slot]){ // dont need synchronized because of canPlay
+                table.removeCard(slot); // remove card from slot on table
+                for(int player = 0; player < env.config.players; player++){
+                    for(int slots = 0; slots < env.config.tableSize; slots++){
+                        if(table.playersTokensLocations[player][slots] == 1){
+                            table.removeToken(player,slots);
+                        }
+                    }  
                 }
             }
         }
-        Collections.shuffle(deck); // shuffle deck 
+    }
+    for(Player player : players){
+        player.getKeysPressed().clear(); // cleans up all the keys that were placed since we reset the table
+        player.tokensLeft = env.config.featureSize;
+        player.penalized = false;
+        player.freezeTime = 0;
+        if (player.isFrozen){
+            env.ui.setFreeze(player.id, 0);
+            player.isFrozen = false;
+        }
+    }
+    playersToCheckQueue.clear();
+}
+
+/**
+ * Check who is/are the winner/s and displays them.
+*/
+private void announceWinners() {
+    // TODO implement
+    int maxScore = Integer.MIN_VALUE;
+    List<Integer> winners = new ArrayList<>();
+
+    for (Player player : players) {
+        int playerScore = player.score();
+        if (playerScore > maxScore) {
+            winners.clear();
+            maxScore = playerScore;
+            winners.add(player.id);
+        } else if (playerScore == maxScore) {
+            winners.add(player.id);
+        }
     }
 
-    /**
-     * Check who is/are the winner/s and displays them.
-     */
-    private void announceWinners() {
-        // TODO implement
-        int maxScore = Integer.MIN_VALUE;
-        List<Integer> winners = new ArrayList<>();
-        
-        for (Player player : players) {
-            int playerScore = player.score();
-            if (playerScore > maxScore) {
-                // Found a new maximum score, clear the winners list
-                winners.clear();
-                maxScore = playerScore;
-                // Add the current player to the winners list
-                winners.add(player.id);
-            } else if (playerScore == maxScore) {
-                // Another player has the same score as the current maximum, add them to winners list
-                winners.add(player.id);
-            }
-        }
-        
-        // Convert the list of winners to an array
-        int[] arrayOfWinners = winners.stream().mapToInt(Integer::intValue).toArray();
-        
-        // Notify the environment of the winners
-        env.ui.announceWinner(arrayOfWinners);
+    int[] arrayOfWinners = winners.stream().mapToInt(Integer::intValue).toArray();
+    env.ui.announceWinner(arrayOfWinners);
+}
+
+private void activatePlayers() {
+    for (Player player : players) {
+        synchronized(player){player.notify();}
     }
+}
 }
