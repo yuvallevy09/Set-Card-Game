@@ -1,4 +1,5 @@
 Set Card Game Simulation (Java)
+
 Focus: Concurrent processing of game logic and player actions
 Description:
 Implemented a Java-based simulation of the classic “Set card game”. 
