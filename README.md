@@ -17,8 +17,7 @@ Showcase practical Java concurrency, synchronization, and test‑driven developm
   - [Run Tests](#run-tests)
 - [Repository Layout](#repository-layout)
 - [Skills and Tools Demonstrated](#skills-and-tools-demonstrated)
-- [Notes for Reviewers](#notes-for-reviewers)
-- [License](#license)
+- [Credits](#credits)
 
 ## Overview
 
@@ -121,12 +120,8 @@ mvn test
 - Test-driven mindset with JUnit 5 and Mockito
 - Build tooling with Maven and project structuring for portability
 
-## Notes for Reviewers
 
-- The code adheres to the assignment’s requirement for fairness and responsiveness.
-- The system scales to multiple AI players and remains responsive under heavy keypress generation.
-- Logs are available via `Env.logger` for observability during runs.
+## Credits
 
-## License
-
-Academic project. If you intend to use parts of this code, please attribute the original repository.
+- Yuval Levy
+- Tomer Faran
