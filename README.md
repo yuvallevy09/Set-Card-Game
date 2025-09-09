@@ -42,11 +42,11 @@ High‑level program flow:
 
 ![Program Flow](set_flow.png)
 
-- `bguspl.set.ex.Dealer`: Main orchestrator thread. Shuffles/deals, manages the round timer, fairly validates set claims, awards points/penalties, and reshuffles on timeout.
-- `bguspl.set.ex.Player`: One thread per player. Consumes a bounded action queue, places/removes tokens, submits claims, and handles freezes. Spawns a companion AI thread for computer players.
-- `bguspl.set.ex.Table`: Shared board state. Maps between slots and cards, tracks player tokens, exposes per-slot locks, and performs UI updates for cards/tokens.
-- `bguspl.set.Util`/`UtilImpl`: Card encoding and set validation utilities.
-- `bguspl.set.UserInterface*`, `InputManager`, `WindowManager`, `Env`, `Config`: Provided UI/infra components used by our implementation.
+- `Dealer`: Main orchestrator thread. Shuffles/deals, manages the round timer, fairly validates set claims, awards points/penalties, and reshuffles on timeout.
+- `Player`: One thread per player. Consumes a bounded action queue, places/removes tokens, submits claims, and handles freezes. Spawns a companion AI thread for computer players.
+- `Table`: Shared board state. Maps between slots and cards, tracks player tokens, exposes per-slot locks, and performs UI updates for cards/tokens.
+- `Util`/`UtilImpl`: Card encoding and set validation utilities.
+- `UserInterface*`, `InputManager`, `WindowManager`, `Env`, `Config`: Provided UI/infra components used by our implementation.
 
 ## Concurrency and Synchronization
 
